@@ -46,10 +46,9 @@ class Range(object):
         return frequencList, rangeIndixes
 
 
-    def find_range_index(self,freq_index):
+    def find_range_index(self,freqIndex):
         try:
-            output = self.rangeIndixes[freq_index]
-            # print(freq_index, 'belongs to frequency range #', output)
+            output = self.rangeIndixes[freqIndex]
             return output
         except ValueError:
             return None  # If the frequency is not in the list
@@ -70,13 +69,13 @@ class CalibrationTrend(object):
         self.stepHeight = stepHeight
         self.ladderDrop = ladderDrop
 
-        self.nasa_df            = self._load_nasa_df(NASAfilepath)
+        self.nasaDF            = self._load_nasaDF(NASAfilepath)
         self.trend              = self._load_trend(trendFilepath)
         self.validBrakePoints   = self._filter_trend()
 
         self.fRange = Range(fRange, ampRange, fLOW, fHIGH)
 
-    def _load_nasa_df(self, filepath)               -> pd.DataFrame:
+    def _load_nasaDF(self, filepath)               -> pd.DataFrame:
         return pd.read_csv(filepath)
     
     def _load_trend(self, filepath)                 -> pd.DataFrame:
@@ -130,15 +129,15 @@ class CalibrationTrend(object):
         breakPoints = df[df['Ampl_diff'] < self.ladderDrop]['Time'].values
         
         validBreakPoints = []
-        previous_break_point = df['Time'].iloc[0]
+        previousBreakPoint = df['Time'].iloc[0]
 
-        for current_break_point in breakPoints:
-            points_between = df[(df['Time'] > previous_break_point) & (df['Time'] < current_break_point)]
-            if len(points_between) >= 2:
-                validBreakPoints.append(previous_break_point)
-                previous_break_point = current_break_point
+        for currentBreakPoint in breakPoints:
+            pointsBetween = df[(df['Time'] > previousBreakPoint) & (df['Time'] < currentBreakPoint)]
+            if len(pointsBetween) >= 2:
+                validBreakPoints.append(previousBreakPoint)
+                previousBreakPoint = currentBreakPoint
 
-        validBreakPoints.append(previous_break_point)
+        validBreakPoints.append(previousBreakPoint)
         # validBreakPoints.append(df['Time'].iloc[-1])
 
         return validBreakPoints
@@ -171,74 +170,74 @@ class CalibrationTrend(object):
         ladder['Slope'] = ladder['Ampl'].diff() / ladder['Time'].diff()
 
         # Identify step dividers where the slope is greater than 1
-        step_dividers = ladder[abs(ladder['Slope']) > self.stepHeight]['Time'].values
+        stepDividers = ladder[abs(ladder['Slope']) > self.stepHeight]['Time'].values
 
         # Recalculate the valid dividers by ensuring all points on dividers are removed
         # Initialize a list to hold the valid dividers
-        valid_dividers = []
+        validDividers = []
 
         # Add a starting point for comparison
-        previous_divider = ladder['Time'].iloc[0]
+        previousDivider = ladder['Time'].iloc[0]
 
-        for current_divider in step_dividers:
-            points_between = ladder[(ladder['Time'] > previous_divider) & 
+        for current_divider in stepDividers:
+            pointsBetween = ladder[(ladder['Time'] > previousDivider) & 
                                                 (ladder['Time'] < current_divider)]
-            if len(points_between) > 2:
-                valid_dividers.append(previous_divider)
-                previous_divider = current_divider
+            if len(pointsBetween) > 2:
+                validDividers.append(previousDivider)
+                previousDivider = current_divider
 
         # Append the last divider
-        valid_dividers.append(previous_divider)
+        validDividers.append(previousDivider)
         
         # Filter the segment to remove points that coincide with divider positions
-        filtered_segment = ladder[~ladder['Time'].isin(step_dividers)]
-        filtered_segment = filtered_segment[~filtered_segment['Time'].isin(valid_dividers)]
+        filteredSegment = ladder[~ladder['Time'].isin(stepDividers)]
+        filteredSegment = filteredSegment[~filteredSegment['Time'].isin(validDividers)]
 
         # Function to calculate the average amplitude within a segment
-        def calculate_average_amplitude(start_time, end_time):
-            segment = filtered_segment[(filtered_segment['Time'] >= start_time) & 
-                                    (filtered_segment['Time'] < end_time)]
+        def calculate_average_amplitude(startTime, endTime):
+            segment = filteredSegment[(filteredSegment['Time'] >= startTime) & 
+                                    (filteredSegment['Time'] < endTime)]
             return segment['Ampl'].mean()
 
         # Check if the difference in average amplitude between the first and second step is twice as large
-        if len(valid_dividers) > 2:
+        if len(validDividers) > 2:
             # Calculate the average amplitude for the first two steps
-            first_step_avg = calculate_average_amplitude(valid_dividers[0], valid_dividers[1])
-            second_step_avg = calculate_average_amplitude(valid_dividers[1], valid_dividers[2])
+            firstStepAvg = calculate_average_amplitude(validDividers[0], validDividers[1])
+            secondStepAvg = calculate_average_amplitude(validDividers[1], validDividers[2])
 
             # Calculate the differences in average amplitude for steps 2 onwards
-            amplitude_differences = []
-            for i in range(2, len(valid_dividers) - 1):
-                avg_diff = abs(calculate_average_amplitude(valid_dividers[i], valid_dividers[i + 1]) -
-                            calculate_average_amplitude(valid_dividers[i - 1], valid_dividers[i]))
-                amplitude_differences.append(avg_diff)
+            amplitudeDifferences = []
+            for i in range(2, len(validDividers) - 1):
+                avg_diff = abs(calculate_average_amplitude(validDividers[i], validDividers[i + 1]) -
+                            calculate_average_amplitude(validDividers[i - 1], validDividers[i]))
+                amplitudeDifferences.append(avg_diff)
 
-            avg_diff_rest = np.mean(amplitude_differences)
+            avgDiffRest = np.mean(amplitudeDifferences)
 
             # Compare the first difference with twice the average of the remaining differences
-            if abs(first_step_avg - second_step_avg) > 2 * avg_diff_rest:
+            if abs(firstStepAvg - secondStepAvg) > 2 * avgDiffRest:
                 # Remove the data points corresponding to the zeroth step
-                filtered_segment = filtered_segment[filtered_segment['Time'] >= valid_dividers[1]]
+                filteredSegment = filteredSegment[filteredSegment['Time'] >= validDividers[1]]
                 # Remove the zeroth divider
-                valid_dividers.pop(0)
+                validDividers.pop(0)
 
         # Calculate geometric means and plot red Xs
         geometricMeans = []
-        for i in range(len(valid_dividers) - 1):
-            segment = filtered_segment[(filtered_segment['Time'] >= valid_dividers[i]) & 
-                                        (filtered_segment['Time'] < valid_dividers[i + 1])]
+        for i in range(len(validDividers) - 1):
+            segment = filteredSegment[(filteredSegment['Time'] >= validDividers[i]) & 
+                                        (filteredSegment['Time'] < validDividers[i + 1])]
             if len(segment) > 0:
-                geom_mean_time = np.average(segment['Time'])
-                geom_mean_ampl = np.average(segment['Ampl'])
-                geometricMeans.append((geom_mean_time, geom_mean_ampl))
+                geomMeanTime = np.average(segment['Time'])
+                geomMeanAmpl = np.average(segment['Ampl'])
+                geometricMeans.append((geomMeanTime, geomMeanAmpl))
 
         if toPlot:
             # # Plot the filtered ladder segment with valid step dividers
-            
+
             fig2 = plt.figure(figsize=(10, 6))  # Create a new figure object
             ax2 = fig2.add_subplot(111)  # Add a subplot (1x1 grid, first subplot)
             ax2.plot(ladder['Time'], ladder['Ampl'], label='Ampl')
-            ax2.scatter(filtered_segment['Time'], filtered_segment['Ampl'], label='Ampl', marker='.', color='purple')
+            ax2.scatter(filteredSegment['Time'], filteredSegment['Ampl'], label='Ampl', marker='.', color='purple')
             ax2.set_xlabel('Time')
             ax2.set_ylabel('Amplitude')
             ax2.set_title('Filtered Ladder')
@@ -246,7 +245,7 @@ class CalibrationTrend(object):
             ax2.grid(True)
 
             # Add vertical dashed lines at valid step dividers
-            for sd in valid_dividers:
+            for sd in validDividers:
                 ax2.axvline(x=sd, color='g', linestyle='--')
 
             # Plot red X's at the geometric mean points
@@ -305,25 +304,25 @@ class CalibrationTrend(object):
         #Check if each ladder has right number of steps i.e. each frequency has the right
         #number of amplitudes
         
-        observed_steps = []
+        observedSteps = []
         for i in range(len(self.validBrakePoints) - 1):
             ladder = self.select_ladder(i)
             gm = self.process_ladder(ladder)
-            observed_steps.append(len(gm))
+            observedSteps.append(len(gm))
 
-        prescribed_steps = []
+        prescribedSteps = []
 
         for findex, f in enumerate(self.fRange.frequencyList):
             row = self.fRange.ampRange.iloc[self.fRange.find_range_index(findex)]
             rStart, rEnd, rStep = row['start'], row['end'], row['step']
-            new_step = ((rEnd-rStart)//rStep + 1)
-            prescribed_steps.append(new_step)
+            newStep = ((rEnd-rStart)//rStep + 1)
+            prescribedSteps.append(newStep)
 
-        if observed_steps != prescribed_steps:
-            for i in range(len(observed_steps)):
-                if observed_steps[i] == prescribed_steps[i]: continue
-                print('Ladder', i, 'has', observed_steps[i], 'while should have', 
-                          prescribed_steps[i])
+        if observedSteps != prescribedSteps:
+            for i in range(len(observedSteps)):
+                if observedSteps[i] == prescribedSteps[i]: continue
+                print('Ladder', i, 'has', observedSteps[i], 'while should have', 
+                          prescribedSteps[i])
             return False    
 
         return True            
@@ -344,12 +343,12 @@ class CalibrationTrend(object):
 
         """
         ladder = self.select_ladder(ladderIndex)
-        geometric_means = self.process_ladder(ladder)
+        geometricMeans = self.process_ladder(ladder)
     
 
         f = self.fRange.frequencyList[ladderIndex]
-        g = self.nasa_df[self.nasa_df['frequency'] == f]['g'].iloc[0]
-        observedAmpsInLadder = [gm[1] for gm in geometric_means]
+        g = self.nasaDF[self.nasaDF['frequency'] == f]['g'].iloc[0]
+        observedAmpsInLadder = [gm[1] for gm in geometricMeans]
         row = self.fRange.ampRange.iloc[self.fRange.find_range_index(ladderIndex)]
         rStart, rEnd, rStep = row['start'], row['end'], row['step']
         prescribedAmplitudes = [i for i in range(rStart, rEnd + 1, rStep)]
@@ -378,16 +377,41 @@ class CalibrationTrend(object):
         None
 
         """
-
+        
+        # Createa the csv file of amp values for future use
         if filename is None:
             filename = 'SDD_calibration_' + str(self.fLOW) + '-' + str(self.fHIGH) + '.csv'
-        final_amplitudes = []
+        finalAmplitudes = []
         for i in range(len(self.validBrakePoints) - 1):
-            final_amplitudes.append(self.amplitude_finder(i))
-            self.nasa_df = self.nasa_df[self.nasa_df['frequency'].isin(self.fRange.frequencyList)]
-        self.nasa_df['Amplitude (mV)'] = final_amplitudes
-        # nasa_df = nasa_df.drop(columns=['a'])
-        self.nasa_df.to_csv(filename, index=False)
+            finalAmplitudes.append(self.amplitude_finder(i))
+            self.nasaDF = self.nasaDF[self.nasaDF['frequency'].isin(self.fRange.frequencyList)]
+        self.nasaDF['Amplitude (mV)'] = finalAmplitudes
+        self.nasaDF.to_csv(filename, index=False)
+
+        # Create the commands file to use in Key Sight
+
+        commands = []
+        commands.append('(Connect "33621A", "USB0::0x0957::0x5407::MY53700452::0::INSTR", "33500B/33600A Series Function / Arbitrary Waveform Generators / 2.09")')
+        
+        for index, row in self.nasaDF.iterrows():
+            restingFrequency = 1
+            frequency = row['frequency']
+            voltage = row['Amplitude (mV)'] / 1000  # Convert mV to V
+            
+            # Main command
+            commands.append(f":SOURce:APPLy:SINusoid {frequency},{voltage:.4f}")
+            commands.append("(Wait 20000ms)")
+            
+            # Intermediate command with 0.001 V
+            commands.append(f":SOURce:APPLy:SINusoid {restingFrequency},0.001")
+            commands.append("(Wait 210000ms)")
+        
+        commands =  "\n".join(commands)
+
+        # Save the commands to a text file
+        outputFilePath = f'./{filename}_commands.txt'
+        with open(outputFilePath, 'w') as file:
+            file.write(commands)
     
     def examine_ladder(self, ladderIndex)           -> None:
         """
