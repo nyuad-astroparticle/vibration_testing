@@ -64,6 +64,7 @@ class CalibrationTrend(object):
                  stepHeight = 0.04,
                  ladderDrop = -0.8, 
                  NASAfilepath = './nasa.csv'):
+        
         self.fLOW       = fLOW
         self.fHIGH      = fHIGH
         self.stepHeight = stepHeight
@@ -79,27 +80,33 @@ class CalibrationTrend(object):
         return pd.read_csv(filepath)
     
     def _load_trend(self, filepath)                 -> pd.DataFrame:
-        return pd.read_csv(filepath)
+        df = pd.read_csv(filepath)
+        df.Time = df.Time - df.Time[0]
+        return df
     
     def plot_trend(self, toSave = False)            -> None:
         df = self.trend
 
-        # Plot Time vs Ampl with valid break points
-        plt.figure(figsize=(12, 6))
-        plt.plot(df['Time'], df['Ampl'], label='Ampl', marker = '.')
-        plt.xlabel('Time')
-        plt.ylabel('Amplitude')
-        plt.title('Time vs Amplitude with Valid Break Points')
-        plt.legend()
-        plt.grid(True)
+        # # Plot Time vs Ampl with valid break points
+
+        fig1 = plt.figure(figsize=(12, 6))  # Create a new figure object
+        ax1 = fig1.add_subplot(111)  # Add a subplot (1x1 grid, first subplot)
+        ax1.plot(df['Time'], df['Ampl'], label='Ampl', marker='.')
+        ax1.set_xlabel('Time')
+        ax1.set_ylabel('Amplitude')
+        ax1.set_title('Time vs Amplitude with Valid Break Points')
+        ax1.legend()
+        ax1.grid(True)
 
         # Add vertical dashed lines at valid break points
         for bp in self.validBrakePoints:
-            plt.axvline(x=bp, color='r', linestyle='--')
-        plt.show()
+            ax1.axvline(x=bp, color='r', linestyle='--')
+
+        plt.show()  # Show the figure
+
 
         if toSave: 
-            plt.savefig('Original Trend Curve')
+            fig1.savefig('Original Trend Curve')
 
     def _filter_trend(self)                         -> list[float]:
         """
@@ -226,31 +233,31 @@ class CalibrationTrend(object):
                 geometricMeans.append((geom_mean_time, geom_mean_ampl))
 
         if toPlot:
-            # Plot the filtered ladder segment with valid step dividers
-            plt.clf()
-            plt.figure(figsize=(10, 6))
-            plt.plot(ladder['Time'], ladder['Ampl'], label='Ampl')
-            plt.scatter(filtered_segment['Time'], filtered_segment['Ampl'], label='Ampl', marker='.', color = 'purple')
-            plt.xlabel('Time')
-            plt.ylabel('Amplitude')
-            plt.title('Filtered First Ladder Segment: Time vs Amplitude with Valid Steps')
-            plt.legend()
-            plt.grid(True)
+            # # Plot the filtered ladder segment with valid step dividers
+            
+            fig2 = plt.figure(figsize=(10, 6))  # Create a new figure object
+            ax2 = fig2.add_subplot(111)  # Add a subplot (1x1 grid, first subplot)
+            ax2.plot(ladder['Time'], ladder['Ampl'], label='Ampl')
+            ax2.scatter(filtered_segment['Time'], filtered_segment['Ampl'], label='Ampl', marker='.', color='purple')
+            ax2.set_xlabel('Time')
+            ax2.set_ylabel('Amplitude')
+            ax2.set_title('Filtered Ladder')
+            ax2.legend()
+            ax2.grid(True)
 
             # Add vertical dashed lines at valid step dividers
             for sd in valid_dividers:
-                plt.axvline(x=sd, color='g', linestyle='--')
+                ax2.axvline(x=sd, color='g', linestyle='--')
 
             # Plot red X's at the geometric mean points
             for gm in geometricMeans:
-                plt.scatter(gm[0], gm[1], color='red', marker='x', s=100)  # Adjust 's' for size of the X
+                ax2.scatter(gm[0], gm[1], color='red', marker='x', s=100)  # Adjust 's' for size of the X
 
-            # Plot the first ladder segment
+            plt.show()  # Show the figure
 
-            plt.show()
 
         if toSave: 
-                    plt.savefig('Ladder')
+            fig2.savefig('Ladder')
 
         return geometricMeans
 
@@ -382,5 +389,19 @@ class CalibrationTrend(object):
         # nasa_df = nasa_df.drop(columns=['a'])
         self.nasa_df.to_csv(filename, index=False)
     
-    def examine_individual_ladder(self, ladderIndex):
+    def examine_ladder(self, ladderIndex)           -> None:
+        """
+        This function plots an individual ladder, already processed.
+
+        **Input**
+
+        *ladderIndex*
+
+        **Output**
+
+        None
+        """
+
+        ladder = self.select_ladder(ladderIndex)
+        self.process_ladder(ladder, toPlot = True)
         return None        
