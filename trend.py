@@ -69,13 +69,29 @@ class CalibrationTrend(object):
         self.stepHeight = stepHeight
         self.ladderDrop = ladderDrop
 
-        self.nasaDF            = self._load_nasaDF(NASAfilepath)
         self.trend              = self._load_trend(trendFilepath)
         self.validBrakePoints   = self._filter_trend()
 
         self.fRange = Range(fRange, ampRange, fLOW, fHIGH)
+        self.nasaDF            = self._load_nasaDF(NASAfilepath)
+        self._filter_nasaDF()
 
-    def _load_nasaDF(self, filepath)               -> pd.DataFrame:
+    def _filter_nasaDF(self)                        -> None:
+        """
+        This function filter nasaDF frequencies keeping only the ones we use in our shake test.
+        Modifies *nasaDF*
+
+        **Input**
+
+        None
+
+        **Output**
+
+        None
+        """
+        self.nasaDF = self.nasaDF[self.nasaDF['Frequency (Hz)'].isin(self.fRange.frequencyList)]
+
+    def _load_nasaDF(self, filepath)                -> pd.DataFrame:
         return pd.read_csv(filepath)
     
     def _load_trend(self, filepath)                 -> pd.DataFrame:
@@ -143,7 +159,7 @@ class CalibrationTrend(object):
         return validBreakPoints
 
     def process_ladder(self, ladder, toPlot = False,
-                        toSave = False)     -> list[tuple[float,float]]:
+                        toSave = False)             -> list[tuple[float,float]]:
 
         """
         This function takes a ladder and splits into steps.
@@ -347,7 +363,7 @@ class CalibrationTrend(object):
     
 
         f = self.fRange.frequencyList[ladderIndex]
-        g = self.nasaDF[self.nasaDF['frequency'] == f]['g'].iloc[0]
+        g = self.nasaDF[self.nasaDF['Frequency (Hz)'] == f]['g'].iloc[0]
         observedAmpsInLadder = [gm[1] for gm in geometricMeans]
         row = self.fRange.ampRange.iloc[self.fRange.find_range_index(ladderIndex)]
         rStart, rEnd, rStep = row['start'], row['end'], row['step']
@@ -384,18 +400,50 @@ class CalibrationTrend(object):
         finalAmplitudes = []
         for i in range(len(self.validBrakePoints) - 1):
             finalAmplitudes.append(self.amplitude_finder(i))
-            self.nasaDF = self.nasaDF[self.nasaDF['frequency'].isin(self.fRange.frequencyList)]
+            # self.nasaDF = self.nasaDF[self.nasaDF['Frequency (Hz)'].isin(self.fRange.frequencyList)]
         self.nasaDF['Amplitude (mV)'] = finalAmplitudes
-        self.nasaDF.to_csv(filename, index=False)
 
+        outputDir = "output_csv"
+        outputFilePath = os.path.join(outputDir, filename)
+
+        # Check if the directory exists, if not, create it
+        if not os.path.exists(outputDir):
+            os.makedirs(outputDir)
+
+        self.nasaDF.to_csv(outputFilePath, index=False)
+
+        return None
+    
+    def create_key_sight_file(self, filename : None | str = None,
+                data : pd.DataFrame = None)  -> None:
+
+        """
+        This function write a key sight command file ready to use in the actual shake test
+
+        **Input**
+
+        *filename* If None given uses a default one
+
+        **Output**
+
+        None
+        """
+
+        if data is None:
+            data = self.nasaDF
+
+        # Createa the csv file of amp values for future use
+        if filename is None:
+            filename = 'SDD_calibration_' + str(self.fLOW) + '-' + str(self.fHIGH) + '_commands.txt'
+        
         # Create the commands file to use in Key Sight
 
         commands = []
         commands.append('(Connect "33621A", "USB0::0x0957::0x5407::MY53700452::0::INSTR", "33500B/33600A Series Function / Arbitrary Waveform Generators / 2.09")')
         
-        for index, row in self.nasaDF.iterrows():
+        for index, row in data.iterrows():
             restingFrequency = 1
-            frequency = row['frequency']
+            frequency = row['Frequency (Hz)']
             voltage = row['Amplitude (mV)'] / 1000  # Convert mV to V
             
             # Main command
@@ -409,9 +457,18 @@ class CalibrationTrend(object):
         commands =  "\n".join(commands)
 
         # Save the commands to a text file
-        outputFilePath = f'./{filename}_commands.txt'
+
+        outputDir = "output_to_key_sight"
+        outputFilePath = os.path.join(outputDir, filename)
+
+        # Check if the directory exists, if not, create it
+        if not os.path.exists(outputDir):
+            os.makedirs(outputDir)
+
         with open(outputFilePath, 'w') as file:
             file.write(commands)
+
+        return None
     
     def examine_ladder(self, ladderIndex)           -> None:
         """
@@ -429,3 +486,147 @@ class CalibrationTrend(object):
         ladder = self.select_ladder(ladderIndex)
         self.process_ladder(ladder, toPlot = True)
         return None        
+    
+class SecondaryCalibration(CalibrationTrend):
+
+    def __init__(self,
+                 trendFilepath,
+                 ampFile, 
+                 fRange,
+                 ampRange,
+                 fLOW = 20, 
+                 fHIGH = 2000, 
+                 stepHeight = 0.1,
+                 ladderDrop = -0.1, 
+                 NASAfilepath = './nasa.csv'):
+        super().__init__(
+                 trendFilepath, 
+                 fRange,
+                 ampRange,
+                 fLOW, 
+                 fHIGH, 
+                 stepHeight,
+                 ladderDrop, 
+                 NASAfilepath)
+        
+        self.ampFile = pd.read_csv(ampFile)
+        self.frequencyList = self.ampFile['Frequency (Hz)']
+        self._filter_nasaDF_secondary()
+
+    def _filter_nasaDF_secondary(self)              -> None:
+        """
+        This is a secondary internal filter function that filters the nasaDF according
+        to the ampFile which is the pre keysight command csv file
+
+        **Input**
+
+        None
+
+        **Output**
+
+        None
+
+        """
+        self.nasaDF = self.nasaDF[self.nasaDF['Frequency (Hz)'].isin(self.frequencyList)]
+        return None
+
+    def process_test(self, toPlot = False)                          -> list[tuple[float, float]]:
+        """
+        This function treats the whole shake test trend curve as a ladder returning the geometric
+        average position of each frequency and amplitude pair
+
+        **Input**
+
+        *toPlot* is an internal argument so that this function can be used by plot_trend. If you
+        want to plot call plot_trend instead.
+
+        **Output**
+        
+        *processedLadder* is a list[tuple[float, float]] that containt coordinates of each frequency - 
+        amplitude pair recorded
+
+        """
+        processedLadder = super().process_ladder(self.trend, toPlot)
+        return processedLadder
+    
+    def plot_trend(self)                            -> None:
+        """
+        This fucntion is the same same as process_test, but it plots and returns nothing
+
+        **Input**
+
+        None
+
+        **Output**
+
+        None
+        
+        """
+        self.process_test(toPlot = True)
+        return None
+    
+    def sanity_check(self)                          -> bool:
+        """
+        This fucntion overrides the partent class sanity check, here it checks if the 
+        number of frequencies observed is the same as the ones given to keysight
+
+        **Input**
+
+        None
+
+        **Output**
+
+        *bool* 
+        """
+        return len(self.process_test()) == len(self.frequencyList)
+    
+    def correct_amplitudes(self, filename: None | 
+                           str = None)              -> pd.DataFrame:
+        """
+        This function is basically the essense of this class: it produces the new iteration of 
+        the amp file that is supposedly closer to desired nasa g values. It takes the first shake test 
+        result and the keysight amplitude values to adjust them hoping they converge to nasa g values. 
+
+        **Input** 
+
+        *filename* if None given, assigng a default name
+
+        **Output**
+
+        *data* is a pandas DataFrame. it saves it into a file and returns it as well
+        """
+
+        #Getting the parameters
+        gm = self.process_test()
+        measuredG = np.array([i[1] for i in gm])
+        keySightAmp = self.ampFile['Amplitude (mV)']
+        nasaG = np.array(self.nasaDF['g'])
+
+        #The correction step
+        #If the value of amplitude was much larger than the nasa one it brings it down
+        #and vice versa. 
+        correctedKeySightAmp = round(keySightAmp * (2 - (measuredG/nasaG)**1),0)
+
+        #Nice formatting
+        correctedKeySightAmp = [int(i) for i in correctedKeySightAmp]
+        data = {'Frequency (Hz)':self.frequencyList, 'Amplitude (mV)':correctedKeySightAmp}
+        data = pd.DataFrame(data)
+
+        if filename is None:
+            filename = 'Shake_test_next_iteration.csv'
+
+        outputDir = "output_csv"
+        outputFilePath = os.path.join(outputDir, filename)
+
+        # Check if the directory exists, if not, create it
+        if not os.path.exists(outputDir):
+            os.makedirs(outputDir)
+
+        data.to_csv(outputFilePath, index=False)
+        return data
+    
+    def create_key_sight_file(self, filename: None | str = None) -> None:
+        if filename is None:
+            filename = 'Shake_test_next_iteration_commands.txt'
+        data = self.correct_amplitudes()
+        return super().create_key_sight_file(filename, data)
