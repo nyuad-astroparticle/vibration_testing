@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 
 class Range(object):
 
-    def __init__(self, fRange:str, ampRange:str, low = 20, high = 2000):
+    def __init__(self, fRange:str, ampRange:str, low:int = 20, high:int = 2000):
         self.fRange    = pd.read_csv(fRange)
         self.ampRange  = pd.read_csv(ampRange)
         self.frequencyList, self.rangeIndixes = self._expand_frequencies(
@@ -46,7 +46,7 @@ class Range(object):
         return frequencList, rangeIndixes
 
 
-    def find_range_index(self,freqIndex):
+    def find_range_index(self,freqIndex:int):
         try:
             output = self.rangeIndixes[freqIndex]
             return output
@@ -55,14 +55,14 @@ class Range(object):
 
 class CalibrationTrend(object):
     def __init__(self,
-                 trendFilepath, 
-                 fRange,
-                 ampRange,
-                 fLOW = 20, 
-                 fHIGH = 300, 
-                 stepHeight = 0.04,
-                 ladderDrop = -0.8, 
-                 NASAfilepath = './nasa.csv'):
+                 trendFilepath : str, 
+                 fRange                         : str,
+                 ampRange                       : str,
+                 fLOW                           : int       = 20, 
+                 fHIGH                          : int       = 300, 
+                 stepHeight                     : float     = 0.04,
+                 ladderDrop                     : float     = -0.8, 
+                 NASAfilepath                   : str       = './nasa.csv'):
         
         self.fLOW       = fLOW
         self.fHIGH      = fHIGH
@@ -91,15 +91,15 @@ class CalibrationTrend(object):
         """
         self.nasaDF = self.nasaDF[self.nasaDF['Frequency (Hz)'].isin(self.fRange.frequencyList)]
 
-    def _load_nasaDF(self, filepath)                -> pd.DataFrame:
+    def _load_nasaDF(self, filepath : str)          -> pd.DataFrame:
         return pd.read_csv(filepath)
     
-    def _load_trend(self, filepath)                 -> pd.DataFrame:
+    def _load_trend(self, filepath : str)           -> pd.DataFrame:
         df = pd.read_csv(filepath)
         df.Time = df.Time - df.Time[0]
         return df
     
-    def plot_trend(self, toSave = False)            -> None:
+    def plot_trend(self, toSave : bool = False)     -> None:
         df = self.trend
 
         # # Plot Time vs Ampl with valid break points
@@ -158,8 +158,8 @@ class CalibrationTrend(object):
 
         return validBreakPoints
 
-    def process_ladder(self, ladder, toPlot = False,
-                        toSave = False)             -> list[tuple[float,float]]:
+    def process_ladder(self, ladder : pd.DataFrame, toPlot : bool = False,
+                        toSave : bool = False)      -> list[tuple[float,float]]:
 
         """
         This function takes a ladder and splits into steps.
@@ -210,7 +210,7 @@ class CalibrationTrend(object):
         filteredSegment = filteredSegment[~filteredSegment['Time'].isin(validDividers)]
 
         # Function to calculate the average amplitude within a segment
-        def calculate_average_amplitude(startTime, endTime):
+        def calculate_average_amplitude(startTime : int, endTime : int):
             segment = filteredSegment[(filteredSegment['Time'] >= startTime) & 
                                     (filteredSegment['Time'] < endTime)]
             return segment['Ampl'].mean()
@@ -379,7 +379,7 @@ class CalibrationTrend(object):
             finalAmplitudeInmV = prescribedAmplitudes[index]
             return finalAmplitudeInmV
 
-    def create_amp_file(self, filename = None)      -> None:
+    def create_amp_file(self, filename:str = None)  -> None:
         """
         This function write a csv file that contains the required mV amplitdue values
         for the actual shake test. Calibration done
@@ -415,7 +415,7 @@ class CalibrationTrend(object):
         return None
     
     def create_key_sight_file(self, filename : None | str = None,
-                data : pd.DataFrame = None)  -> None:
+                data : None | pd.DataFrame = None)  -> None:
 
         """
         This function write a key sight command file ready to use in the actual shake test
@@ -470,7 +470,7 @@ class CalibrationTrend(object):
 
         return None
     
-    def examine_ladder(self, ladderIndex)           -> None:
+    def examine_ladder(self, ladderIndex : int)     -> None:
         """
         This function plots an individual ladder, already processed.
 
@@ -488,17 +488,16 @@ class CalibrationTrend(object):
         return None        
     
 class SecondaryCalibration(CalibrationTrend):
-
     def __init__(self,
-                 trendFilepath,
-                 ampFile, 
-                 fRange,
-                 ampRange,
-                 fLOW = 20, 
-                 fHIGH = 2000, 
-                 stepHeight = 0.1,
-                 ladderDrop = -0.1, 
-                 NASAfilepath = './nasa.csv'):
+                 trendFilepath                  : str, 
+                 ampFile                        : str, 
+                 fRange                         : str,
+                 ampRange                       : str,
+                 fLOW                           : int       = 20, 
+                 fHIGH                          : int       = 300, 
+                 stepHeight                     : float     = 0.04,
+                 ladderDrop                     : float     = -0.8, 
+                 NASAfilepath                   : str       = './nasa.csv'):
         super().__init__(
                  trendFilepath, 
                  fRange,
@@ -530,7 +529,7 @@ class SecondaryCalibration(CalibrationTrend):
         self.nasaDF = self.nasaDF[self.nasaDF['Frequency (Hz)'].isin(self.frequencyList)]
         return None
 
-    def process_test(self, toPlot = False)                          -> list[tuple[float, float]]:
+    def process_test(self, toPlot : bool = False)   -> list[tuple[float, float]]:
         """
         This function treats the whole shake test trend curve as a ladder returning the geometric
         average position of each frequency and amplitude pair
@@ -625,7 +624,8 @@ class SecondaryCalibration(CalibrationTrend):
         data.to_csv(outputFilePath, index=False)
         return data
     
-    def create_key_sight_file(self, filename: None | str = None) -> None:
+    def create_key_sight_file(self, filename: None |
+                               str = None)          -> None:
         if filename is None:
             filename = 'Shake_test_next_iteration_commands.txt'
         data = self.correct_amplitudes()
