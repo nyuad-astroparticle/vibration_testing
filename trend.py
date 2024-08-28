@@ -494,9 +494,9 @@ class SecondaryCalibration(CalibrationTrend):
                  fRange                         : str,
                  ampRange                       : str,
                  fLOW                           : int       = 20, 
-                 fHIGH                          : int       = 300, 
-                 stepHeight                     : float     = 0.04,
-                 ladderDrop                     : float     = -0.8, 
+                 fHIGH                          : int       = 2000, 
+                 stepHeight                     : float     = 0.1,
+                 ladderDrop                     : float     = -0.1, 
                  NASAfilepath                   : str       = './nasa.csv'):
         super().__init__(
                  trendFilepath, 
